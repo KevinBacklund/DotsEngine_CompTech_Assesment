@@ -22,6 +22,7 @@ DotsScene::DotsScene()
 
 void DotsScene::DotsScene_Render()
 {
+	ZoneScoped;
 	for (auto& dot : dots)
 	{
 		dot.Dot_Render(dotVisual);
@@ -36,41 +37,49 @@ void DotsScene::DotsScene_Update()
 	flyingCamera->Update();
 
 	//Handle velocity
-	for (auto& dot : dots)
 	{
-		dot.position += glm::normalize(dot.velocity) * (dotSpeed / dot.radius) * Time::deltaTime;
+		ZoneScopedN("Velocity")
+		for (auto& dot : dots)
+		{
+			dot.position += glm::normalize(dot.velocity) * (dotSpeed / dot.radius) * Time::deltaTime;
+		}
 	}
 
 	//Handle bounds
-	for (auto& dot : dots)
 	{
-		if (dot.position.x > bounds - dot.radius || dot.position.x < -bounds + dot.radius) dot.velocity.x *= -1;
-		if (dot.position.y > bounds - dot.radius || dot.position.y < -bounds + dot.radius) dot.velocity.y *= -1;
-		if (dot.position.z > bounds - dot.radius || dot.position.z < -bounds + dot.radius) dot.velocity.z *= -1;
+		ZoneScopedN("Bounds")
+		for (auto& dot : dots)
+		{
+			if (dot.position.x > bounds - dot.radius || dot.position.x < -bounds + dot.radius) dot.velocity.x *= -1;
+			if (dot.position.y > bounds - dot.radius || dot.position.y < -bounds + dot.radius) dot.velocity.y *= -1;
+			if (dot.position.z > bounds - dot.radius || dot.position.z < -bounds + dot.radius) dot.velocity.z *= -1;
 
-		dot.position.x = glm::clamp(dot.position.x, -bounds + dot.radius, bounds - dot.radius);
-		dot.position.y = glm::clamp(dot.position.y, -bounds + dot.radius, bounds - dot.radius);
-		dot.position.z = glm::clamp(dot.position.z, -bounds + dot.radius, bounds - dot.radius);
+			dot.position.x = glm::clamp(dot.position.x, -bounds + dot.radius, bounds - dot.radius);
+			dot.position.y = glm::clamp(dot.position.y, -bounds + dot.radius, bounds - dot.radius);
+			dot.position.z = glm::clamp(dot.position.z, -bounds + dot.radius, bounds - dot.radius);
+		}
 	}
 
 	//Handle collision
-	for (size_t d1 = 0; d1 < dots.size(); d1++)
 	{
-		for (size_t d2 = d1; d2 < dots.size(); d2++)
+		ZoneScopedN("Collision")
+		for (size_t d1 = 0; d1 < dots.size(); d1++)
 		{
-			if (d1 == d2) continue;
-			if (glm::distance(dots[d1].position, dots[d2].position) < dots[d1].radius + dots[d2].radius)
+			for (size_t d2 = d1 + 1; d2 < dots.size(); d2++)
 			{
-				glm::vec3 n1 = glm::normalize(dots[d1].velocity);
-				glm::vec3 n2 = glm::normalize(dots[d2].velocity);
+				if (glm::distance(dots[d1].position, dots[d2].position) < dots[d1].radius + dots[d2].radius)
+				{
+					glm::vec3 n1 = glm::normalize(dots[d1].velocity);
+					glm::vec3 n2 = glm::normalize(dots[d2].velocity);
 
-				dots[d2].velocity = glm::reflect(dots[d2].velocity, n1);
-				dots[d1].velocity = glm::reflect(dots[d1].velocity, n2);
+					dots[d2].velocity = glm::reflect(dots[d2].velocity, n1);
+					dots[d1].velocity = glm::reflect(dots[d1].velocity, n2);
 
-				dots[d2].Health--;
-				dots[d2].ReCreate(dotVisual);
-				dots[d1].Health--;
-				dots[d1].ReCreate(dotVisual);
+					dots[d2].Health--;
+					dots[d2].ReCreate(dotVisual);
+					dots[d1].Health--;
+					dots[d1].ReCreate(dotVisual);
+				}
 			}
 		}
 	}
@@ -85,21 +94,24 @@ void DotsScene::DotsScene_Update()
 	}
 
 	//Handle death, spawn new dot
-	std::vector<size_t> toRemove;
-
-	for (size_t i = 0; i < dots.size(); i++)
 	{
-		if (dots[i].Health <= 0)
+		ZoneScopedN("DeathCheck")
+			std::vector<size_t> toRemove;
+
+		for (size_t i = 0; i < dots.size(); i++)
 		{
-			toRemove.push_back(i);
-			DotsScene_SpawnRandomDot();
+			if (dots[i].Health <= 0)
+			{
+				toRemove.push_back(i);
+				DotsScene_SpawnRandomDot();
+			}
 		}
-	}
 
-	//Handle removal from vector and spawning new dot
-	for (int i = toRemove.size() - 1; i >= 0; i--)
-	{
-		dots.erase(dots.begin() + toRemove[i]);
+		//Handle removal from vector and spawning new dot
+		for (int i = toRemove.size() - 1; i >= 0; i--)
+		{
+			dots.erase(dots.begin() + toRemove[i]);
+		}
 	}
 }
 
