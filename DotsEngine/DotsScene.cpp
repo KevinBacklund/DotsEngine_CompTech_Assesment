@@ -45,6 +45,21 @@ void DotsScene::DotsScene_Update()
 		}
 	}
 
+	//Create octree
+	{
+		ZoneScopedN("Octree")
+		if (octreeRoot != nullptr)
+		{
+			delete octreeRoot;
+		}
+		octreeRoot = new Octant(glm::vec3(bounds, bounds, bounds), glm::vec3(-bounds, -bounds, -bounds));
+		for (auto& dot : dots)
+		{
+			octreeRoot->InsertDot(&dot);
+		}
+		octreeRoot->DebugDraw();
+	}
+
 	//Handle bounds
 	{
 		ZoneScopedN("Bounds")
@@ -65,18 +80,20 @@ void DotsScene::DotsScene_Update()
 		ZoneScopedN("Collision")
 		for (size_t d1 = 0; d1 < dots.size(); d1++)
 		{
-			for (size_t d2 = d1 + 1; d2 < dots.size(); d2++)
+			std::vector<Dot*> rangeResults;
+			dots[d1].octant->QueryRange(&dots[d1],rangeResults);
+			for (size_t d2 = 0; d2 < rangeResults.size(); d2++)
 			{
-				if (glm::distance(dots[d1].position, dots[d2].position) < dots[d1].radius + dots[d2].radius)
+				if (glm::distance(dots[d1].position, rangeResults[d2]->position) < dots[d1].radius + rangeResults[d2]->radius)
 				{
 					glm::vec3 n1 = glm::normalize(dots[d1].velocity);
-					glm::vec3 n2 = glm::normalize(dots[d2].velocity);
+					glm::vec3 n2 = glm::normalize(rangeResults[d2]->velocity);
 
-					dots[d2].velocity = glm::reflect(dots[d2].velocity, n1);
+					rangeResults[d2]->velocity = glm::reflect(rangeResults[d2]->velocity, n1);
 					dots[d1].velocity = glm::reflect(dots[d1].velocity, n2);
 
-					dots[d2].Health--;
-					dots[d2].ReCreate(dotVisual);
+					rangeResults[d2]->Health--;
+					rangeResults[d2]->ReCreate(dotVisual);
 					dots[d1].Health--;
 					dots[d1].ReCreate(dotVisual);
 				}

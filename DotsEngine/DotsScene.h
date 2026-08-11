@@ -3,6 +3,8 @@
 #include "Shader.h"
 #include <vector>
 #include <Camera/FlyingCamera.h>
+#include "DebugLines.h"
+
 
 struct DotVisual
 {
@@ -90,6 +92,7 @@ private:
 
 	FlyingCamera* flyingCamera;
 	DotVisual* dotVisual;
+	Octant* octreeRoot = nullptr;
 };
 
 class Octant
@@ -120,6 +123,17 @@ public:
 		}
 	}	
 
+	void DebugDraw()
+	{
+		//DebugLines::DrawCube(center, glm::quat(), topRightFront - bottomLeftBack, glm::vec3(0, 1, 1));
+		//DebugLines::DrawSphere(center, 2, glm::vec3(1, 0, 1));
+		if (children[0] == nullptr) return;
+		for (int i = 0; i < 8; i++)
+		{
+			children[i]->DebugDraw();
+		}
+	}
+
 	void Subdivide()
 	{
 		glm::vec3 newTopRightFront, newBottomLeftBack;
@@ -135,11 +149,19 @@ public:
 			children[i] = new Octant(newTopRightFront, newBottomLeftBack);
 			children[i]->level = level + 1;
 			children[i]->parent = this;
+			for (auto& dot : dots)
+			{
+				if (children[i]->InBoundry(dot->position, dot->radius))
+				{
+					children[i]->dots.push_back(dot);
+					dots.erase(std::remove(dots.begin(), dots.end(), dot), dots.end());
+				}
+			}
 		}
 	}
 
 	void InsertDot(Dot* dot){
-		if (level >= MaxLevel || dots.empty())
+		if (level >= MaxLevel || dots.size() < 1)
 		{
 			dots.push_back(dot);
 			dot->octant = this;
@@ -168,11 +190,17 @@ public:
 		return true;
 	}
 
-	const int MaxLevel = 5;
+	const int MaxLevel = 3;
 	int level = 0;
 
-	void QueryRange(std::vector<Dot*>& results)	
+	void QueryRange(Dot* aDot, std::vector<Dot*>& results)	
 	{
-		results = dots;
+		std::vector<Dot*> tempResults;
+		for (auto& dot : dots)
+		{
+			if (dot == aDot) continue;
+			tempResults.push_back(dot);
+		}
+		results = tempResults;
 	}
 };
