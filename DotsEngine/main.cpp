@@ -88,6 +88,8 @@ int main()
 	Input::Init(window);
 	glEnable(GL_DEPTH_TEST);
 
+	glfwSwapInterval(0);
+
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();

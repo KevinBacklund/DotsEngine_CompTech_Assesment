@@ -22,6 +22,7 @@ struct Dot
 
 	glm::vec3 position;
 	glm::vec3 velocity;
+	//float timeSinceVelocityChange
 	float radius;
 	int Health;
 
