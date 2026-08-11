@@ -106,12 +106,18 @@ class Octant
 	Octant* parent = nullptr;
 	Octant* children[8] = { nullptr };
 
+	const int MaxLevel = 4;
+	int level = 0;
+
 public:
+	float bounds = 50.0f;
+
 	Octant(const glm::vec3& aTopRightFront, const glm::vec3& aBottomLeftBack)
 	{
 		topRightFront = aTopRightFront;
 		bottomLeftBack = aBottomLeftBack;
 		center = (topRightFront + bottomLeftBack) / 2.0f;
+		bounds = topRightFront.x;
 	};
 
 	~Octant()
@@ -125,7 +131,7 @@ public:
 
 	void DebugDraw()
 	{
-		//DebugLines::DrawCube(center, glm::quat(), topRightFront - bottomLeftBack, glm::vec3(0, 1, 1));
+		DebugLines::DrawCube(center, glm::quat(), (topRightFront - bottomLeftBack)/2.0f, glm::vec3(0, 1, 1));
 		//DebugLines::DrawSphere(center, 2, glm::vec3(1, 0, 1));
 		if (children[0] == nullptr) return;
 		for (int i = 0; i < 8; i++)
@@ -153,7 +159,7 @@ public:
 			{
 				if (children[i]->InBoundry(dot->position, dot->radius))
 				{
-					children[i]->dots.push_back(dot);
+					children[i]->InsertDot(dot);
 					dots.erase(std::remove(dots.begin(), dots.end(), dot), dots.end());
 				}
 			}
@@ -161,7 +167,7 @@ public:
 	}
 
 	void InsertDot(Dot* dot){
-		if (level >= MaxLevel || dots.size() < 1)
+		if (level >= MaxLevel || dots.empty())
 		{
 			dots.push_back(dot);
 			dot->octant = this;
@@ -179,6 +185,13 @@ public:
 				return;
 			}
 		}
+		dots.push_back(dot);
+		dot->octant = this;
+	}
+
+	void RemoveDot(Dot* dot)
+	{
+		dots.erase(std::remove(dots.begin(), dots.end(), dot), dots.end());
 	}
 
 	bool InBoundry(const glm::vec3& position, float radius)
@@ -189,9 +202,6 @@ public:
 
 		return true;
 	}
-
-	const int MaxLevel = 3;
-	int level = 0;
 
 	void QueryRange(Dot* aDot, std::vector<Dot*>& results)	
 	{

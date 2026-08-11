@@ -16,6 +16,7 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual();
+	octreeRoot = new Octant(glm::vec3(bounds, bounds, bounds), glm::vec3(-bounds, -bounds, -bounds));
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
 }
@@ -45,17 +46,27 @@ void DotsScene::DotsScene_Update()
 		}
 	}
 
-	//Create octree
+	if (octreeRoot->bounds != bounds)
 	{
-		ZoneScopedN("Octree")
-		if (octreeRoot != nullptr)
-		{
-			delete octreeRoot;
-		}
+		std::cout << "Rebuilding octree" << std::endl;
+		delete octreeRoot;
 		octreeRoot = new Octant(glm::vec3(bounds, bounds, bounds), glm::vec3(-bounds, -bounds, -bounds));
 		for (auto& dot : dots)
 		{
 			octreeRoot->InsertDot(&dot);
+		}
+	}
+
+	{
+		ZoneScopedN("OctreeUpdate")
+		for (auto& dot : dots)
+		{
+			if (!dot.octant->InBoundry(dot.position, dot.radius))
+			{
+				dot.octant->RemoveDot(&dot);
+				dot.octant = nullptr;
+				octreeRoot->InsertDot(&dot);
+			}
 		}
 		octreeRoot->DebugDraw();
 	}
@@ -153,6 +164,7 @@ void DotsScene::DotsScene_SpawnRandomDot()
 	newDot.position = position;
 
 	dots.push_back(newDot);
+	octreeRoot->InsertDot(&dots.back());
 }
 
 void DotsScene::DotsScene_SpawnDot(glm::vec3 aPosition, glm::vec3 aVelocity)
@@ -165,6 +177,7 @@ void DotsScene::DotsScene_SpawnDot(glm::vec3 aPosition, glm::vec3 aVelocity)
 	newDot.position = aPosition;
 
 	dots.push_back(newDot);
+	octreeRoot->InsertDot(&dots.back());
 }
 
 void DotsScene::DotsScene_ClearDots()
