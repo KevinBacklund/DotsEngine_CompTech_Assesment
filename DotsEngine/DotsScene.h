@@ -12,10 +12,13 @@ struct DotVisual
 	Mesh_Sphere* mesh3 = new Mesh_Sphere(3, glm::vec3(0, 0, 1));;
 };
 
+class Octant;
 
 struct Dot
 {
 	Mesh_Sphere* mesh;
+
+	Octant* octant = nullptr;
 
 	glm::vec3 position;
 	glm::vec3 velocity;
@@ -88,5 +91,87 @@ private:
 	DotVisual* dotVisual;
 };
 
+class Octant
+{
+	glm::vec3 topRightFront;
+	glm::vec3 bottomLeftBack;
+	glm::vec3 center;
 
+	std::vector<Dot*> dots;
 
+	Octant* parent = nullptr;
+	Octant* children[8] = { nullptr };
+
+public:
+	Octant(const glm::vec3& aTopRightFront, const glm::vec3& aBottomLeftBack)
+	{
+		topRightFront = aTopRightFront;
+		bottomLeftBack = aBottomLeftBack;
+		center = (topRightFront + bottomLeftBack) / 2.0f;
+	};
+
+	~Octant()
+	{
+		if (children[0] == nullptr) return;
+		for (int i = 0; i < 8; i++)
+		{
+			delete children[i];
+		}
+	}	
+
+	void Subdivide()
+	{
+		glm::vec3 newTopRightFront, newBottomLeftBack;
+		for (int i = 0; i < 8; i++)
+		{
+			newTopRightFront = topRightFront;
+			newBottomLeftBack = bottomLeftBack;
+
+			if (i & 1) newBottomLeftBack.x = center.x; else newTopRightFront.x = center.x; // binary 1 = 0001
+			if (i & 2) newBottomLeftBack.y = center.y; else newTopRightFront.y = center.y; // binary 2 = 0010 
+			if (i & 4) newBottomLeftBack.z = center.z; else newTopRightFront.z = center.z; // binary 4 = 0100
+
+			children[i] = new Octant(newTopRightFront, newBottomLeftBack);
+			children[i]->level = level + 1;
+			children[i]->parent = this;
+		}
+	}
+
+	void InsertDot(Dot* dot){
+		if (level >= MaxLevel || dots.empty())
+		{
+			dots.push_back(dot);
+			dot->octant = this;
+			return;
+		}
+		if (children[0] == nullptr)
+		{
+			Subdivide();
+		}
+		for (int i = 0; i < 8; i++)
+		{
+			if (children[i]->InBoundry(dot->position, dot->radius))
+			{
+				children[i]->InsertDot(dot);
+				return;
+			}
+		}
+	}
+
+	bool InBoundry(const glm::vec3& position, float radius)
+	{
+		if (position.x + radius < bottomLeftBack.x || position.x - radius > topRightFront.x) return false;
+		if (position.y + radius < bottomLeftBack.y || position.y - radius > topRightFront.y) return false;
+		if (position.z + radius < bottomLeftBack.z || position.z - radius > topRightFront.z) return false;
+
+		return true;
+	}
+
+	const int MaxLevel = 5;
+	int level = 0;
+
+	void QueryRange(std::vector<Dot*>& results)	
+	{
+		results = dots;
+	}
+};
