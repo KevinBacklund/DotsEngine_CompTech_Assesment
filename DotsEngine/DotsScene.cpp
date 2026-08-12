@@ -54,7 +54,7 @@ void DotsScene::DotsScene_Update()
 		{
 			octreeRoot->InsertDot(&dot);
 		}
-		octreeRoot->DebugDraw();
+		//octreeRoot->DebugDraw();
 	}
 
 	//Handle bounds
@@ -93,6 +93,9 @@ void DotsScene::DotsScene_Update()
 					rangeResults[d2]->ReCreate(dotVisual);
 					dots[d1].Health--;
 					dots[d1].ReCreate(dotVisual);
+
+					rangeResults[d2]->position += n2 * 0.9f;
+					dots[d1].position += n1 * 0.9f;
 				}
 			}
 		}

@@ -4,6 +4,7 @@
 #include <vector>
 #include <Camera/FlyingCamera.h>
 #include "DebugLines.h"
+#include "tracy/Tracy.hpp"
 
 
 struct DotVisual
@@ -107,7 +108,7 @@ class Octant
 	Octant* children[8] = { nullptr };
 
 	bool isLeaf = true;
-	const int maxLevel = 3;
+	const int maxLevel = 4;
 	int level = 0;
 
 public:
@@ -137,6 +138,7 @@ public:
 
 	void DebugDraw()
 	{
+		ZoneScoped;
 		DebugLines::DrawCube(center, glm::quat(), glm::vec3(halfWidth, halfWidth, halfWidth), glm::vec3(0, 1, 1));
 		DebugLines::DrawSphere(center, 2, glm::vec3(1, 0, 1));
 		if (children[0] == nullptr) return;
