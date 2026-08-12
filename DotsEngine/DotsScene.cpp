@@ -16,7 +16,7 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual();
-	octreeRoot = new Octant(glm::vec3(bounds, bounds, bounds), glm::vec3(-bounds, -bounds, -bounds));
+	octreeRoot = new Octant(glm::vec3(0,0,0), bounds);
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
 }
@@ -46,27 +46,13 @@ void DotsScene::DotsScene_Update()
 		}
 	}
 
-	if (octreeRoot->bounds != bounds)
 	{
-		std::cout << "Rebuilding octree" << std::endl;
+		ZoneScopedN("RebuildOctree")
 		delete octreeRoot;
-		octreeRoot = new Octant(glm::vec3(bounds, bounds, bounds), glm::vec3(-bounds, -bounds, -bounds));
+		octreeRoot = new Octant(glm::vec3(0, 0, 0), bounds);
 		for (auto& dot : dots)
 		{
 			octreeRoot->InsertDot(&dot);
-		}
-	}
-
-	{
-		ZoneScopedN("OctreeUpdate")
-		for (auto& dot : dots)
-		{
-			if (!dot.octant->InBoundry(dot.position, dot.radius))
-			{
-				dot.octant->RemoveDot(&dot);
-				dot.octant = nullptr;
-				octreeRoot->InsertDot(&dot);
-			}
 		}
 		octreeRoot->DebugDraw();
 	}
@@ -92,7 +78,7 @@ void DotsScene::DotsScene_Update()
 		for (size_t d1 = 0; d1 < dots.size(); d1++)
 		{
 			std::vector<Dot*> rangeResults;
-			dots[d1].octant->QueryRange(&dots[d1],rangeResults);
+			octreeRoot->QueryRange(&dots[d1],rangeResults);
 			for (size_t d2 = 0; d2 < rangeResults.size(); d2++)
 			{
 				if (glm::distance(dots[d1].position, rangeResults[d2]->position) < dots[d1].radius + rangeResults[d2]->radius)
