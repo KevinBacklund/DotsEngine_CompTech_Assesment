@@ -127,9 +127,10 @@ public:
 
 	void RemoveChildren()
 	{
-		if (children[0] == nullptr) return;
+		if (isLeaf) return;
 		for (int i = 0; i < 8; i++)
 		{
+			if (children[i] == nullptr) continue;
 			children[i]->RemoveChildren();
 			delete children[i];
 			children[i] = nullptr;
@@ -138,40 +139,31 @@ public:
 
 	void DebugDraw()
 	{
-		ZoneScoped;
 		DebugLines::DrawCube(center, glm::quat(), glm::vec3(halfWidth, halfWidth, halfWidth), glm::vec3(0, 1, 1));
 		DebugLines::DrawSphere(center, 2, glm::vec3(1, 0, 1));
-		if (children[0] == nullptr) return;
+		if (isLeaf) return;
 		for (int i = 0; i < 8; i++)
 		{
+			if (children[i] == nullptr) continue;
 			children[i]->DebugDraw();
 		}
 	}
 
-	void Subdivide()
+
+
+	void Subdivide(int childIndex)
 	{
 		isLeaf = false;
 		glm::vec3 newCenter;
-		for (int i = 0; i < 8; i++)
-		{
-			newCenter = center;
-			float newHalfWidth = halfWidth * 0.5f;
+		newCenter = center;
+		float newHalfWidth = halfWidth * 0.5f;
 
-			if (i & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
-			if (i & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
-			if (i & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
-			children[i] = new Octant(newCenter, newHalfWidth);
-			children[i]->level = level + 1;
-			children[i]->parent = this;
-			for (auto& dot : dots)
-			{
-				if (children[i]->InLooseBoundry(dot->position, dot->radius))
-				{
-					children[i]->InsertDot(dot);
-					dots.erase(std::remove(dots.begin(), dots.end(), dot), dots.end());
-				}
-			}
-		}
+		if (childIndex & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
+		if (childIndex & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
+		if (childIndex & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
+		children[childIndex] = new Octant(newCenter, newHalfWidth);
+		children[childIndex]->level = level + 1;
+		children[childIndex]->parent = this;
 	}
 
 	int FindOctant(const glm::vec3& position)
@@ -192,12 +184,14 @@ public:
 			return;
 		}
 
-		if (isLeaf)
+		int octantIndex = FindOctant(dot->position);
+
+		if (isLeaf || children[octantIndex] == nullptr)
 		{
-			Subdivide();
+			Subdivide(octantIndex);
 		}
 
-		children[FindOctant(dot->position)]->InsertDot(dot);
+		children[octantIndex]->InsertDot(dot);
 	}
 
 	void RemoveDot(Dot* dot)
@@ -228,6 +222,7 @@ public:
 		{
 			for (int i = 0; i < 8; i++)
 			{
+				if (children[i] == nullptr) continue;
 				children[i]->QueryRange(aDot, results);
 			}
 		}
