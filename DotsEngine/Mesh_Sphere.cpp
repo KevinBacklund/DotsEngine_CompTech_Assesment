@@ -2,11 +2,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
-Mesh_Sphere::Mesh_Sphere(float aRadius, glm::vec3 aColor)
+Mesh_Sphere::Mesh_Sphere(float aRadius, glm::vec3 aColor, size_t maxInstances)
 {
 	radius = aRadius;
 	color = aColor;
-	Mesh_Setup();
+	Mesh_Setup(maxInstances);
 }
 
 void Mesh_Sphere::Mesh_CreateMesh()

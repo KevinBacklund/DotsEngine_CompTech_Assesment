@@ -8,8 +8,8 @@ class Mesh
 {
 public:
 
-	void Mesh_Setup();
-	void Mesh_Render(Shader* aShader, glm::vec3 position);
+	void Mesh_Setup(size_t maxInstances);
+	void Mesh_Render(Shader* aShader, std::vector<glm::vec3> positions);
 
 protected:
 	virtual void Mesh_CreateMesh();
@@ -18,6 +18,6 @@ protected:
 	glm::vec3 color;
 
 private:
-	unsigned int VAO, VBO, EBO;
+	unsigned int VAO, meshVBO, instanceVBO, EBO;
 };
 

@@ -24,7 +24,6 @@ public:
     std::string LoadTextFile(const std::string& path);
 
 private:
-
     unsigned int ID = 0;
 
     unsigned int CompileShader(GLenum type, const char* source);

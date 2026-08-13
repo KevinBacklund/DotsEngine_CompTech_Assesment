@@ -10,9 +10,16 @@
 struct DotVisual
 {
 	Shader* shader = new Shader("Assets/Shaders/VertexShader.glsl", "Assets/Shaders/FragmentShader.glsl");;
-	Mesh_Sphere* mesh1 = new Mesh_Sphere(1, glm::vec3(1, 0, 0));;
-	Mesh_Sphere* mesh2 = new Mesh_Sphere(2, glm::vec3(0, 1, 0));;
-	Mesh_Sphere* mesh3 = new Mesh_Sphere(3, glm::vec3(0, 0, 1));;
+	Mesh_Sphere* mesh1;
+	Mesh_Sphere* mesh2;
+	Mesh_Sphere* mesh3;
+	DotVisual(size_t maxInstances)
+	{
+		mesh1 = new Mesh_Sphere(1, glm::vec3(1, 0, 0), maxInstances);
+		mesh2 = new Mesh_Sphere(2, glm::vec3(0, 1, 0), maxInstances);
+		mesh3 = new Mesh_Sphere(3, glm::vec3(0, 0, 1), maxInstances);
+	}
+
 };
 
 class Octant;
@@ -25,14 +32,13 @@ struct Dot
 
 	glm::vec3 position;
 	glm::vec3 velocity;
-	//float timeSinceVelocityChange
 	float radius;
 	int Health;
 
-	void Dot_Render(DotVisual* visual)
-	{
-		mesh->Mesh_Render(visual->shader, position);
-	}
+	//void Dot_Render(DotVisual* visual)
+	//{
+	//	mesh->Mesh_Render(visual->shader, position);
+	//}
 
 	void ReCreate(DotVisual* visual)
 	{
@@ -86,6 +92,10 @@ public:
 	int dotCount = 200;
 	float bounds = 50.0f;
 	float dotSpeed = 5.0f;
+
+	std::vector<glm::vec3> mesh1Positions;
+	std::vector<glm::vec3> mesh2Positions;
+	std::vector<glm::vec3> mesh3Positions;
 
 private:
 

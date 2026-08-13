@@ -15,7 +15,7 @@ DotsScene::DotsScene()
 {
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
-	dotVisual = new DotVisual();
+	dotVisual = new DotVisual(dotCount);
 	octreeRoot = new Octant(glm::vec3(0,0,0), bounds);
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
@@ -24,10 +24,31 @@ DotsScene::DotsScene()
 void DotsScene::DotsScene_Render()
 {
 	ZoneScoped;
+
 	for (auto& dot : dots)
 	{
-		dot.Dot_Render(dotVisual);
+		switch (dot.Health)
+		{
+		case 1:
+			mesh1Positions.push_back(dot.position);
+			break;
+		case 2:
+			mesh2Positions.push_back(dot.position);
+			break;
+		case 3:
+			mesh3Positions.push_back(dot.position);
+			break;
+		default:
+			break;
+		}
 	}
+	dotVisual->mesh1->Mesh_Render(dotVisual->shader, mesh1Positions);
+	dotVisual->mesh2->Mesh_Render(dotVisual->shader, mesh2Positions);
+	dotVisual->mesh3->Mesh_Render(dotVisual->shader, mesh3Positions);
+
+	mesh1Positions.clear();
+	mesh2Positions.clear();
+	mesh3Positions.clear();
 
 	DotsScene_DrawBounds();
 }
