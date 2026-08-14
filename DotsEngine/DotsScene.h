@@ -135,106 +135,23 @@ public:
 		RemoveChildren();
 	}	
 
-	void RemoveChildren()
-	{
-		if (isLeaf) return;
-		for (int i = 0; i < 8; i++)
-		{
-			if (children[i] == nullptr) continue;
-			children[i]->RemoveChildren();
-			delete children[i];
-			children[i] = nullptr;
-		}
-	}
+	void RemoveChildren();
 
-	void DebugDraw()
-	{
-		DebugLines::DrawCube(center, glm::quat(), glm::vec3(halfWidth, halfWidth, halfWidth), glm::vec3(0, 1, 1));
-		DebugLines::DrawSphere(center, 2, glm::vec3(1, 0, 1));
-		if (isLeaf) return;
-		for (int i = 0; i < 8; i++)
-		{
-			if (children[i] == nullptr) continue;
-			children[i]->DebugDraw();
-		}
-	}
+	void DebugDraw();
 
+	void Subdivide(int childIndex);
 
+	int FindOctant(const glm::vec3& position);
 
-	void Subdivide(int childIndex)
-	{
-		isLeaf = false;
-		glm::vec3 newCenter;
-		newCenter = center;
-		float newHalfWidth = halfWidth * 0.5f;
-
-		if (childIndex & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
-		if (childIndex & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
-		if (childIndex & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
-		children[childIndex] = new Octant(newCenter, newHalfWidth);
-		children[childIndex]->level = level + 1;
-		children[childIndex]->parent = this;
-	}
-
-	int FindOctant(const glm::vec3& position)
-	{
-		int index = 0;
-		if (position.x > center.x) index |= 1; 
-		if (position.y > center.y) index |= 2; 
-		if (position.z > center.z) index |= 4; 
-		return index;
-	}
-
-	void InsertDot(Dot* dot)
-	{
-		if (dot->radius > halfWidth || level >= maxLevel)
-		{
-			dots.push_back(dot);
-			dot->octant = this;
-			return;
-		}
-
-		int octantIndex = FindOctant(dot->position);
-
-		if (isLeaf || children[octantIndex] == nullptr)
-		{
-			Subdivide(octantIndex);
-		}
-
-		children[octantIndex]->InsertDot(dot);
-	}
+	void InsertDot(Dot* dot);
 
 	void RemoveDot(Dot* dot)
 	{
 		dots.erase(std::remove(dots.begin(), dots.end(), dot), dots.end());
 	}
 
-	bool InLooseBoundry(const glm::vec3& position, float radius)
-	{
-		if (position.x + radius < center.x - looseHalfWidth || position.x - radius > center.x + looseHalfWidth) return false;
-		if (position.y + radius < center.y - looseHalfWidth || position.y - radius > center.y + looseHalfWidth) return false;
-		if (position.z + radius < center.z - looseHalfWidth || position.z - radius > center.z + looseHalfWidth) return false;
+	bool InLooseBoundry(const glm::vec3& position, float radius);
 
-		return true;
-	}
+	void QueryRange(Dot* aDot, std::vector<Dot*>& results);
 
-	void QueryRange(Dot* aDot, std::vector<Dot*>& results)	
-	{
-		if(!InLooseBoundry(aDot->position, aDot->radius)) return;
-
-		for (auto& dot : dots)
-		{
-			if (dot == aDot) continue;
-			results.push_back(dot);
-		}
-
-		if(!isLeaf)
-		{
-			for (int i = 0; i < 8; i++)
-			{
-				if (children[i] == nullptr) continue;
-				children[i]->QueryRange(aDot, results);
-			}
-		}
-	}
 };
