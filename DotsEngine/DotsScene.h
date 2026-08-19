@@ -5,7 +5,10 @@
 #include <Camera/FlyingCamera.h>
 #include "DebugLines.h"
 #include "tracy/Tracy.hpp"
-
+#include <thread>
+#include <mutex>
+#include <unordered_set>
+#include <semaphore>
 
 struct DotVisual
 {
@@ -20,6 +23,86 @@ struct DotVisual
 		mesh3 = new Mesh_Sphere(3, glm::vec3(0, 0, 1), maxInstances);
 	}
 
+};
+
+class ThreadPool
+{
+public:
+
+	int threadCount = 0;
+
+	ThreadPool(size_t numThreads = std::thread::hardware_concurrency())
+	{
+		threadCount = numThreads;
+		for (size_t i = 0; i < numThreads; i++)
+		{
+			threads.emplace_back([this, i]()
+			{
+				std::string threadName = "Thread " + std::to_string(i);
+				tracy::SetThreadName(threadName.c_str());
+				while (true)
+				{
+					std::function<void()> task;
+					{
+						std::unique_lock<std::mutex> lock(queueMutex);
+						conditionAddTask.wait(lock, [this]() { return stop || !tasks.empty(); });
+						if (stop && tasks.empty()) return;
+
+						task = std::move(tasks.back());
+						tasks.pop_back();
+					}
+					waitMutex.lock();
+					busyThreads++;
+					waitMutex.unlock();
+
+					task();
+
+					waitMutex.lock();
+					busyThreads--;
+					waitMutex.unlock();
+
+					conditionTaskWait.notify_one();
+				}
+			});
+		}
+	}
+
+	~ThreadPool()
+	{
+		{
+			std::unique_lock<std::mutex> lock(queueMutex);
+			stop = true;
+		}
+		conditionAddTask.notify_all();
+		for (std::thread& thread : threads)
+		{
+			thread.join();
+		}
+	}
+
+	void WaitForTasks()
+	{
+		std::unique_lock<std::mutex> lock(waitMutex);
+		conditionTaskWait.wait(lock, [this](){ return tasks.empty() && (busyThreads == 0); });
+	}
+
+	void Enqueue(std::function<void()> task)
+	{
+		
+		std::unique_lock<std::mutex> lock(queueMutex);
+		tasks.push_back(std::move(task));
+		conditionAddTask.notify_one();
+	}
+
+private:
+	std::vector<std::thread> threads;
+	std::vector<std::function<void()>> tasks;
+	std::mutex queueMutex;
+	std::mutex waitMutex;
+	std::condition_variable conditionAddTask;
+	std::condition_variable conditionTaskWait;
+	bool stop = false;
+	int busyThreads = 0;
 };
 
 class Octant;
@@ -65,6 +148,28 @@ struct Dot
 	}
 };
 
+struct CollisionPair
+{
+	Dot* dot1;
+	Dot* dot2;
+
+	bool operator==(const CollisionPair& other) const
+	{
+		return (dot1 == other.dot1 && dot2 == other.dot2) || (dot1 == other.dot2 && dot2 == other.dot1);
+	}
+};
+
+namespace std
+{
+	template<> struct hash<CollisionPair>
+	{
+		std::size_t operator()(const CollisionPair& pair) const
+		{
+			return std::hash<Dot*>()(pair.dot1) ^ std::hash<Dot*>()(pair.dot2);
+		}
+	};
+}
+
 class DotsScene
 {
 public:
@@ -97,6 +202,10 @@ public:
 	std::vector<glm::vec3> mesh2Positions;
 	std::vector<glm::vec3> mesh3Positions;
 
+	std::mutex collisionMutex;
+	std::counting_semaphore<64> dotPairSemaphore{0};
+
+
 private:
 
 	std::vector<Dot> dots;
@@ -104,6 +213,9 @@ private:
 	FlyingCamera* flyingCamera;
 	DotVisual* dotVisual;
 	Octant* octreeRoot = nullptr;
+	ThreadPool* threadPool;
+	std::unordered_set<CollisionPair> dotsToCollide;
+
 };
 
 class Octant
@@ -155,3 +267,4 @@ public:
 	void QueryRange(Dot* aDot, std::vector<Dot*>& results);
 
 };
+

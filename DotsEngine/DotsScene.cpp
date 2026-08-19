@@ -4,10 +4,7 @@
 
 #include <random>
 #include <glm/gtc/random.hpp>
-
 #include <iostream>
-
-#include "tracy/Tracy.hpp"
 
 Camera* DotsScene::mainCamera;
 
@@ -17,6 +14,7 @@ DotsScene::DotsScene()
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual(dotCount);
 	octreeRoot = new Octant(glm::vec3(0,0,0), bounds);
+	threadPool = new ThreadPool();
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
 }
@@ -93,10 +91,79 @@ void DotsScene::DotsScene_Update()
 		}
 	}
 
+	if (dots.empty()) return;
+
 	//Handle collision
 	{
 		ZoneScopedN("Collision")
-		for (size_t d1 = 0; d1 < dots.size(); d1++)
+
+		for (int i = 0; i < threadPool->threadCount; i++)
+		{
+			int startIndex = (dots.size() / threadPool->threadCount) * i;
+			int endIndex = (dots.size() / threadPool->threadCount) * (i + 1);
+			if (i == threadPool->threadCount - 1) endIndex = dots.size();
+			threadPool->Enqueue([this, startIndex, endIndex]()
+			{
+				ZoneScopedN("FindCollisions");
+				for (int d1 = startIndex; d1 < endIndex; d1++)
+				{
+					std::vector<Dot*> rangeResults;
+					{	
+						ZoneScopedN("OctreeQuery")
+						octreeRoot->QueryRange(&dots[d1], rangeResults);
+					}
+					for (size_t d2 = 0; d2 < rangeResults.size(); d2++)
+					{
+						if (&dots[d1] == rangeResults[d2]) continue;
+						if (glm::distance(dots[d1].position, rangeResults[d2]->position) < dots[d1].radius + rangeResults[d2]->radius)
+						{
+							collisionMutex.lock();
+							dotsToCollide.insert({&dots[d1], rangeResults[d2]});
+							collisionMutex.unlock();
+						}
+					}
+				}
+			});
+		}
+
+		threadPool->WaitForTasks();
+
+		for (int i = 0; i < threadPool->threadCount; i++)
+		{
+			threadPool->Enqueue([this]()
+			{
+				ZoneScopedN("ProcessCollisions");
+
+				while (!dotsToCollide.empty())
+				{
+					collisionMutex.lock();
+					if (dotsToCollide.empty())
+					{
+						collisionMutex.unlock();
+						continue;
+					}
+					CollisionPair dotToCollide = *dotsToCollide.begin();
+					dotsToCollide.erase(dotToCollide);
+					collisionMutex.unlock();
+
+					glm::vec3 n1 = glm::normalize(dotToCollide.dot1->velocity);
+					glm::vec3 n2 = glm::normalize(dotToCollide.dot2->velocity);
+
+					dotToCollide.dot2->velocity = glm::reflect(dotToCollide.dot2->velocity, n1);
+					dotToCollide.dot1->velocity = glm::reflect(dotToCollide.dot1->velocity, n2);
+
+					dotToCollide.dot2->Health--;
+					dotToCollide.dot2->ReCreate(dotVisual);
+					dotToCollide.dot1->Health--;
+					dotToCollide.dot1->ReCreate(dotVisual);
+
+					dotToCollide.dot2->position += n2 * 0.9f;
+					dotToCollide.dot1->position += n1 * 0.9f;
+				}
+			});
+		}
+
+		/*for (size_t d1 = 0; d1 < dots.size(); d1++)
 		{
 			std::vector<Dot*> rangeResults;
 			octreeRoot->QueryRange(&dots[d1],rangeResults);
@@ -119,7 +186,7 @@ void DotsScene::DotsScene_Update()
 					dots[d1].position += n1 * 0.9f;
 				}
 			}
-		}
+		}*/
 	}
 
 	//Look for nan's
@@ -132,6 +199,9 @@ void DotsScene::DotsScene_Update()
 	}
 
 	//Handle death, spawn new dot
+
+	threadPool->WaitForTasks();
+
 	{
 		ZoneScopedN("DeathCheck")
 			std::vector<size_t> toRemove;
