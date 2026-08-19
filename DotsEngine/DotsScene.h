@@ -209,6 +209,8 @@ public:
 private:
 
 	std::vector<Dot> dots;
+	std::vector<size_t> toRemove;
+
 
 	FlyingCamera* flyingCamera;
 	DotVisual* dotVisual;
@@ -224,22 +226,24 @@ class Octant
 	float halfWidth;
 	float looseHalfWidth;
 
-	std::vector<Dot*> dots;
+	std::vector<Dot*> octantDots;
 
-	Octant* parent = nullptr;
 	Octant* children[8] = { nullptr };
 
 	bool isLeaf = true;
 	const int maxLevel = 4;
 	int level = 0;
+	int dotReserveSize;
 
 public:
 
-	Octant(glm::vec3 aCenter, float aHalfWidth)
+	Octant(glm::vec3 aCenter, float aHalfWidth, size_t adotReserveSize = 10)
 	{
 		center = aCenter;
 		halfWidth = aHalfWidth;
 		looseHalfWidth = halfWidth * 1.5f;
+		dotReserveSize = adotReserveSize;
+		octantDots.reserve(dotReserveSize);
 	};
 
 	~Octant()
@@ -259,7 +263,7 @@ public:
 
 	void RemoveDot(Dot* dot)
 	{
-		dots.erase(std::remove(dots.begin(), dots.end(), dot), dots.end());
+		octantDots.erase(std::remove(octantDots.begin(), octantDots.end(), dot), octantDots.end());
 	}
 
 	bool InLooseBoundry(const glm::vec3& position, float radius);

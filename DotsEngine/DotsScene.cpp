@@ -13,7 +13,7 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual(dotCount);
-	octreeRoot = new Octant(glm::vec3(0,0,0), bounds);
+	octreeRoot = new Octant(glm::vec3(0,0,0), bounds, dotCount * 0.01f);
 	threadPool = new ThreadPool();
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
@@ -102,25 +102,32 @@ void DotsScene::DotsScene_Update()
 			int startIndex = (dots.size() / threadPool->threadCount) * i;
 			int endIndex = (dots.size() / threadPool->threadCount) * (i + 1);
 			if (i == threadPool->threadCount - 1) endIndex = dots.size();
+
 			threadPool->Enqueue([this, startIndex, endIndex]()
 			{
 				ZoneScopedN("FindCollisions");
+				std::vector<Dot*> rangeResults;
+				rangeResults.reserve(dotCount * 0.002f);
+
 				for (int d1 = startIndex; d1 < endIndex; d1++)
 				{
-					std::vector<Dot*> rangeResults;
-					{	
+					{
 						ZoneScopedN("OctreeQuery")
 						octreeRoot->QueryRange(&dots[d1], rangeResults);
 					}
-					for (size_t d2 = 0; d2 < rangeResults.size(); d2++)
 					{
-						if (&dots[d1] == rangeResults[d2]) continue;
-						if (glm::distance(dots[d1].position, rangeResults[d2]->position) < dots[d1].radius + rangeResults[d2]->radius)
+						ZoneScopedN("CollisionCheck")
+						for (size_t d2 = 0; d2 < rangeResults.size(); d2++)
 						{
-							collisionMutex.lock();
-							dotsToCollide.insert({&dots[d1], rangeResults[d2]});
-							collisionMutex.unlock();
+							if (&dots[d1] == rangeResults[d2]) continue;
+							if (glm::distance(dots[d1].position, rangeResults[d2]->position) < dots[d1].radius + rangeResults[d2]->radius)
+							{
+								collisionMutex.lock();
+								dotsToCollide.insert({ &dots[d1], rangeResults[d2] });
+								collisionMutex.unlock();
+							}
 						}
+						rangeResults.clear();
 					}
 				}
 			});
@@ -162,31 +169,6 @@ void DotsScene::DotsScene_Update()
 				}
 			});
 		}
-
-		/*for (size_t d1 = 0; d1 < dots.size(); d1++)
-		{
-			std::vector<Dot*> rangeResults;
-			octreeRoot->QueryRange(&dots[d1],rangeResults);
-			for (size_t d2 = 0; d2 < rangeResults.size(); d2++)
-			{
-				if (glm::distance(dots[d1].position, rangeResults[d2]->position) < dots[d1].radius + rangeResults[d2]->radius)
-				{
-					glm::vec3 n1 = glm::normalize(dots[d1].velocity);
-					glm::vec3 n2 = glm::normalize(rangeResults[d2]->velocity);
-
-					rangeResults[d2]->velocity = glm::reflect(rangeResults[d2]->velocity, n1);
-					dots[d1].velocity = glm::reflect(dots[d1].velocity, n2);
-
-					rangeResults[d2]->Health--;
-					rangeResults[d2]->ReCreate(dotVisual);
-					dots[d1].Health--;
-					dots[d1].ReCreate(dotVisual);
-
-					rangeResults[d2]->position += n2 * 0.9f;
-					dots[d1].position += n1 * 0.9f;
-				}
-			}
-		}*/
 	}
 
 	//Look for nan's
@@ -204,7 +186,6 @@ void DotsScene::DotsScene_Update()
 
 	{
 		ZoneScopedN("DeathCheck")
-			std::vector<size_t> toRemove;
 
 		for (size_t i = 0; i < dots.size(); i++)
 		{
@@ -220,6 +201,7 @@ void DotsScene::DotsScene_Update()
 		{
 			dots.erase(dots.begin() + toRemove[i]);
 		}
+		toRemove.clear();
 	}
 }
 
@@ -244,7 +226,6 @@ void DotsScene::DotsScene_SpawnRandomDot()
 	newDot.position = position;
 
 	dots.push_back(newDot);
-	octreeRoot->InsertDot(&dots.back());
 }
 
 void DotsScene::DotsScene_SpawnDot(glm::vec3 aPosition, glm::vec3 aVelocity)
@@ -257,7 +238,6 @@ void DotsScene::DotsScene_SpawnDot(glm::vec3 aPosition, glm::vec3 aVelocity)
 	newDot.position = aPosition;
 
 	dots.push_back(newDot);
-	octreeRoot->InsertDot(&dots.back());
 }
 
 void DotsScene::DotsScene_ClearDots()
@@ -312,9 +292,8 @@ void Octant::Subdivide(int childIndex)
 	if (childIndex & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
 	if (childIndex & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
 	if (childIndex & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
-	children[childIndex] = new Octant(newCenter, newHalfWidth);
+	children[childIndex] = new Octant(newCenter, newHalfWidth, dotReserveSize);
 	children[childIndex]->level = level + 1;
-	children[childIndex]->parent = this;
 }
 
 int Octant::FindOctant(const glm::vec3& position)
@@ -328,9 +307,9 @@ int Octant::FindOctant(const glm::vec3& position)
 
 void Octant::InsertDot(Dot* dot)
 {
-	if (dot->radius > halfWidth || level >= maxLevel)
+	if (dot->radius > halfWidth * 0.5f || level >= maxLevel)
 	{
-		dots.push_back(dot);
+		octantDots.push_back(dot);
 		dot->octant = this;
 		return;
 	}
@@ -358,11 +337,12 @@ void Octant::QueryRange(Dot* aDot, std::vector<Dot*>& results)
 {
 	if (!InLooseBoundry(aDot->position, aDot->radius)) return;
 
-	for (auto& dot : dots)
+	for (auto& dot : octantDots)
 	{
 		if (dot == aDot) continue;
 		results.push_back(dot);
 	}
+
 
 	if (!isLeaf)
 	{
