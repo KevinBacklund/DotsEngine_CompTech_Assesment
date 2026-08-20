@@ -183,22 +183,17 @@ void DotsScene::DotsScene_Update()
 
 	{
 		ZoneScopedN("DeathCheck")
-
-		for (size_t i = 0; i < dots.size(); i++)
+		auto it = dots.begin();
+		while (it != dots.end())
 		{
-			if (dots[i].Health <= 0)
+			if (it->Health <= 0)
 			{
-				toRemove.push_back(i);
-				DotsScene_SpawnRandomDot();
+				auto lastElement = dots.end() - 1;
+				if (it != lastElement) *it = std::move(*lastElement);
+				dots.pop_back();
 			}
+			++it;
 		}
-
-		//Handle removal from vector and spawning new dot
-		for (int i = toRemove.size() - 1; i >= 0; i--)
-		{
-			dots.erase(dots.begin() + toRemove[i]);
-		}
-		toRemove.clear();
 	}
 }
 
