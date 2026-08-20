@@ -191,6 +191,7 @@ void DotsScene::DotsScene_Update()
 				auto lastElement = dots.end() - 1;
 				if (it != lastElement) *it = std::move(*lastElement);
 				dots.pop_back();
+				continue;
 			}
 			++it;
 		}
