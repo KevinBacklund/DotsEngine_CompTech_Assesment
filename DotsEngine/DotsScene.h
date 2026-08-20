@@ -239,10 +239,10 @@ public:
 
 	~Octant()
 	{
-		RemoveChildren();
+		//RemoveChildren();
 	}	
 
-	void RemoveChildren();
+	//void RemoveChildren();
 
 
 	std::vector<Dot*> octantDots;
@@ -254,7 +254,7 @@ public:
 
 
 
-	Octant* children[8] = { nullptr };
+	int children[8];
 
 	bool isLeaf = true;
 	int dotReserveSize;

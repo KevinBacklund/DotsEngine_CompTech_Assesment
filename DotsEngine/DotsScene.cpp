@@ -169,13 +169,13 @@ void DotsScene::DotsScene_Update()
 	}
 
 	//Look for nan's
-	for (auto& dot : dots)
-	{
-		if (glm::any(glm::isnan(dot.position)))
-		{
-			std::cout << "NAN FOUND IN DOT" << std::endl;
-		}
-	}
+	//for (auto& dot : dots)
+	//{
+	//	if (glm::any(glm::isnan(dot.position)))
+	//	{
+	//		std::cout << "NAN FOUND IN DOT" << std::endl;
+	//	}
+	//}
 
 	//Handle death, spawn new dot
 
@@ -293,13 +293,13 @@ void Octree::Subdivide(Octant* aOctant)
 		if (i & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
 		if (i & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
 
-		aOctant->children[i] = &octantObjectPool[octantIndex];
-		aOctant->children[i]->level = aOctant->level + 1;
-		aOctant->children[i]->center = newCenter;
-		aOctant->children[i]->halfWidth = newHalfWidth;
-		aOctant->children[i]->looseHalfWidth = newHalfWidth * 1.5f;
-		aOctant->children[i]->isLeaf = true;
-		aOctant->children[i]->octantDots.clear();
+		aOctant->children[i] = octantIndex;
+		octantObjectPool[octantIndex].level = aOctant->level + 1;
+		octantObjectPool[octantIndex].center = newCenter;
+		octantObjectPool[octantIndex].halfWidth = newHalfWidth;
+		octantObjectPool[octantIndex].looseHalfWidth = newHalfWidth * 1.5f;
+		octantObjectPool[octantIndex].isLeaf = true;
+		octantObjectPool[octantIndex].octantDots.clear();
 		octantIndex++;
 	}
 }
@@ -327,7 +327,7 @@ void Octree::InsertDot(Dot* dot, Octant* aOctant)
 	}
 
 	int octantIndex = FindOctant(dot->position, aOctant);
-	InsertDot(dot, aOctant->children[octantIndex]);
+	InsertDot(dot, &octantObjectPool[aOctant->children[octantIndex]]);
 }
 
 bool Octree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant)
@@ -354,23 +354,22 @@ void Octree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
 	{
 		for (int i = 0; i < 8; i++)
 		{
-			if (aOctant->children[i] == nullptr) continue;
-			QueryRange(aDot, results, aOctant->children[i]);
+			QueryRange(aDot, results,&octantObjectPool[aOctant->children[i]]);
 		}
 	}
 }
 
-void Octant::RemoveChildren()
-{
-	if (isLeaf) return;
-	for (int i = 0; i < 8; i++)
-	{
-		if (children[i] == nullptr) continue;
-		children[i]->RemoveChildren();
-		delete children[i];
-		children[i] = nullptr;
-	}
-}
+//void Octant::RemoveChildren()
+//{
+//	if (isLeaf) return;
+//	for (int i = 0; i < 8; i++)
+//	{
+//		if (children[i] == nullptr) continue;
+//		children[i]->RemoveChildren();
+//		delete children[i];
+//		children[i] = nullptr;
+//	}
+//}
 
 void Octree::DebugDraw(Octant* aOctant)
 {
@@ -379,7 +378,6 @@ void Octree::DebugDraw(Octant* aOctant)
 	if (aOctant->isLeaf) return;
 	for (int i = 0; i < 8; i++)
 	{
-		if (aOctant->children[i] == nullptr) continue;
-		DebugDraw(aOctant->children[i]);
+		DebugDraw(&octantObjectPool[aOctant->children[i]]);
 	}
 }
