@@ -61,7 +61,7 @@ void DotsEditor::DotsEditor_Draw()
 		if (CollisionCheck)
 		{
 			scene->DotsScene_ClearDots();
-			scene->DotsScene_SpawnDot(glm::vec3(8, 0, 0), glm::vec3(-1, 0, 0));
+			scene->DotsScene_SpawnDot(glm::vec3(8, 2, 0), glm::vec3(-1, 0, 0));
 			scene->DotsScene_SpawnDot(glm::vec3(-8, 0, 0), glm::vec3(1, 0, 0));
 		}
 		else

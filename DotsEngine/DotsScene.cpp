@@ -166,19 +166,20 @@ void DotsScene::DotsScene_Update()
 					dotsToCollide.erase(dotToCollide);
 					collisionMutex.unlock();
 
-					glm::vec3 n1 = glm::normalize(dotToCollide.dot1->velocity);
-					glm::vec3 n2 = glm::normalize(dotToCollide.dot2->velocity);
+					glm::vec3 dir1 = glm::normalize(dotToCollide.dot1->velocity);
+					glm::vec3 dir2 = glm::normalize(dotToCollide.dot2->velocity);
+					glm::vec3 surface = glm::normalize(dotToCollide.dot1->position - dotToCollide.dot2->position);
 
-					dotToCollide.dot2->velocity = glm::reflect(dotToCollide.dot2->velocity, n1);
-					dotToCollide.dot1->velocity = glm::reflect(dotToCollide.dot1->velocity, n2);
+					dotToCollide.dot2->velocity = glm::reflect(dotToCollide.dot2->velocity, surface);
+					dotToCollide.dot1->velocity = glm::reflect(dotToCollide.dot1->velocity, surface);
 
 					dotToCollide.dot2->Health--;
 					dotToCollide.dot2->ReCreate(dotVisual);
 					dotToCollide.dot1->Health--;
 					dotToCollide.dot1->ReCreate(dotVisual);
 
-					dotToCollide.dot2->position += n2 * 0.9f;
-					dotToCollide.dot1->position += n1 * 0.9f;
+					dotToCollide.dot2->position += dir2 * 0.9f;
+					dotToCollide.dot1->position += dir1 * 0.9f;
 				}
 			});
 		}
