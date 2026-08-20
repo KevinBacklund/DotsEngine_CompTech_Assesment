@@ -9,6 +9,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <semaphore>
+#include <cmath>
 
 struct DotVisual
 {
@@ -106,6 +107,7 @@ private:
 };
 
 class Octant;
+class Octree;
 
 struct Dot
 {
@@ -215,6 +217,7 @@ private:
 	FlyingCamera* flyingCamera;
 	DotVisual* dotVisual;
 	Octant* octreeRoot = nullptr;
+	Octree* octree;
 	ThreadPool* threadPool;
 	std::unordered_set<CollisionPair> dotsToCollide;
 
@@ -222,21 +225,9 @@ private:
 
 class Octant
 {
-	glm::vec3 center;
-	float halfWidth;
-	float looseHalfWidth;
 
-	std::vector<Dot*> octantDots;
-
-	Octant* children[8] = { nullptr };
-
-	bool isLeaf = true;
-	const int maxLevel = 4;
-	int level = 0;
-	int dotReserveSize;
 
 public:
-
 	Octant(glm::vec3 aCenter, float aHalfWidth, size_t adotReserveSize = 10)
 	{
 		center = aCenter;
@@ -253,22 +244,72 @@ public:
 
 	void RemoveChildren();
 
-	void DebugDraw();
 
-	void Subdivide(int childIndex);
+	std::vector<Dot*> octantDots;
 
-	int FindOctant(const glm::vec3& position);
+	glm::vec3 center;
+	float halfWidth;
+	float looseHalfWidth;
+	int level = 0;
 
-	void InsertDot(Dot* dot);
 
-	void RemoveDot(Dot* dot)
-	{
-		octantDots.erase(std::remove(octantDots.begin(), octantDots.end(), dot), octantDots.end());
-	}
 
-	bool InLooseBoundry(const glm::vec3& position, float radius);
+	Octant* children[8] = { nullptr };
 
-	void QueryRange(Dot* aDot, std::vector<Dot*>& results);
+	bool isLeaf = true;
+	int dotReserveSize;
 
 };
 
+class Octree
+{
+public:
+
+	Octree() 
+	{
+		int maxOctants = pow(8, maxLevel);
+		for (int i = 0; i < maxOctants; i++)
+		{
+			Octant newOctant = Octant(glm::vec3(0, 0, 0), 0);
+			octantObjectPool.push_back(newOctant);
+		}
+	};
+
+	std::vector<Octant> octantObjectPool;
+	Octant* root = nullptr;
+	const int maxLevel = 5;
+	int octantIndex = 0;
+
+	void rebuildOctree(std::vector<Dot> &dots, float bounds)
+	{
+		octantIndex = 0;
+		root = &octantObjectPool[octantIndex];
+		root->center = glm::vec3(0, 0, 0);
+		root->halfWidth = bounds;
+		root->looseHalfWidth = bounds * 1.5f;
+		root->isLeaf = true;
+		root->level = 0;
+		octantIndex++;
+		for (auto& dot : dots)
+		{
+			InsertDot(&dot, root);
+		}
+	};
+
+	void DebugDraw(Octant* aOctant);
+
+	void Subdivide(Octant* aOctant);
+
+	int FindOctant(const glm::vec3& position, Octant* aOctant);
+
+	void InsertDot(Dot* dot, Octant* aOctant);
+
+	void RemoveDot(Dot* dot, Octant* aOctant)
+	{
+		aOctant->octantDots.erase(std::remove(aOctant->octantDots.begin(), aOctant->octantDots.end(), dot), aOctant->octantDots.end());
+	}
+
+	bool InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant);
+
+	void QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant);
+};

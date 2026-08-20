@@ -13,7 +13,9 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual(dotCount);
-	octreeRoot = new Octant(glm::vec3(0,0,0), bounds, dotCount * 0.01f);
+	//octreeRoot = new Octant(glm::vec3(0,0,0), bounds, dotCount * 0.01f);
+	octree = new Octree;
+	//octree->root = new Octant(glm::vec3(0, 0, 0), bounds, dotCount * 0.01f);
 	threadPool = new ThreadPool();
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
@@ -67,13 +69,8 @@ void DotsScene::DotsScene_Update()
 
 	{
 		ZoneScopedN("RebuildOctree")
-		delete octreeRoot;
-		octreeRoot = new Octant(glm::vec3(0, 0, 0), bounds);
-		for (auto& dot : dots)
-		{
-			octreeRoot->InsertDot(&dot);
-		}
-		//octreeRoot->DebugDraw();
+		octree->rebuildOctree(dots, bounds);
+		//octree->DebugDraw(octree->root);
 	}
 
 	//Handle bounds
@@ -107,13 +104,13 @@ void DotsScene::DotsScene_Update()
 			{
 				ZoneScopedN("FindCollisions");
 				std::vector<Dot*> rangeResults;
-				rangeResults.reserve(dotCount * 0.002f);
+				rangeResults.reserve(25);
 
 				for (int d1 = startIndex; d1 < endIndex; d1++)
 				{
 					{
 						ZoneScopedN("OctreeQuery")
-						octreeRoot->QueryRange(&dots[d1], rangeResults);
+						octree->QueryRange(&dots[d1], rangeResults, octree->root);
 					}
 					{
 						ZoneScopedN("CollisionCheck")
@@ -282,74 +279,83 @@ void DotsScene::DotsScene_LeaderBoardMode()
 }
 
 
-void Octant::Subdivide(int childIndex)
+void Octree::Subdivide(Octant* aOctant)
 {
-	isLeaf = false;
-	glm::vec3 newCenter;
-	newCenter = center;
-	float newHalfWidth = halfWidth * 0.5f;
+	aOctant->isLeaf = false;
 
-	if (childIndex & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
-	if (childIndex & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
-	if (childIndex & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
-	children[childIndex] = new Octant(newCenter, newHalfWidth, dotReserveSize);
-	children[childIndex]->level = level + 1;
+	for (int i = 0; i < 8; i++)
+	{
+		glm::vec3 newCenter;
+		newCenter = aOctant->center;
+		float newHalfWidth = aOctant->halfWidth * 0.5f;
+
+		if (i & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
+		if (i & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
+		if (i & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
+
+		aOctant->children[i] = &octantObjectPool[octantIndex];
+		aOctant->children[i]->level = aOctant->level + 1;
+		aOctant->children[i]->center = newCenter;
+		aOctant->children[i]->halfWidth = newHalfWidth;
+		aOctant->children[i]->looseHalfWidth = newHalfWidth * 1.5f;
+		aOctant->children[i]->isLeaf = true;
+		aOctant->children[i]->octantDots.clear();
+		octantIndex++;
+	}
 }
-
-int Octant::FindOctant(const glm::vec3& position)
+int Octree::FindOctant(const glm::vec3& position, Octant* aOctant)
 {
 	int index = 0;
-	if (position.x > center.x) index |= 1;
-	if (position.y > center.y) index |= 2;
-	if (position.z > center.z) index |= 4;
+	if (position.x > aOctant->center.x) index |= 1;
+	if (position.y > aOctant->center.y) index |= 2;
+	if (position.z > aOctant->center.z) index |= 4;
 	return index;
 }
 
-void Octant::InsertDot(Dot* dot)
+void Octree::InsertDot(Dot* dot, Octant* aOctant)
 {
-	if (dot->radius > halfWidth * 0.5f || level >= maxLevel)
+	if (dot->radius > aOctant->halfWidth * 0.5f || aOctant->level >= maxLevel)
 	{
-		octantDots.push_back(dot);
-		dot->octant = this;
+		aOctant->octantDots.push_back(dot);
+		dot->octant = aOctant;
 		return;
 	}
 
-	int octantIndex = FindOctant(dot->position);
-
-	if (isLeaf || children[octantIndex] == nullptr)
+	if (aOctant->isLeaf)
 	{
-		Subdivide(octantIndex);
+		Subdivide(aOctant);
 	}
 
-	children[octantIndex]->InsertDot(dot);
+	int octantIndex = FindOctant(dot->position, aOctant);
+	InsertDot(dot, aOctant->children[octantIndex]);
 }
 
-bool Octant::InLooseBoundry(const glm::vec3& position, float radius)
+bool Octree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant)
 {
-	if (position.x + radius < center.x - looseHalfWidth || position.x - radius > center.x + looseHalfWidth) return false;
-	if (position.y + radius < center.y - looseHalfWidth || position.y - radius > center.y + looseHalfWidth) return false;
-	if (position.z + radius < center.z - looseHalfWidth || position.z - radius > center.z + looseHalfWidth) return false;
+	if (position.x + radius < aOctant->center.x - aOctant->looseHalfWidth || position.x - radius > aOctant->center.x + aOctant->looseHalfWidth) return false;
+	if (position.y + radius < aOctant->center.y - aOctant->looseHalfWidth || position.y - radius > aOctant->center.y + aOctant->looseHalfWidth) return false;
+	if (position.z + radius < aOctant->center.z - aOctant->looseHalfWidth || position.z - radius > aOctant->center.z + aOctant->looseHalfWidth) return false;
 
 	return true;
 }
 
-void Octant::QueryRange(Dot* aDot, std::vector<Dot*>& results)
+void Octree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
 {
-	if (!InLooseBoundry(aDot->position, aDot->radius)) return;
+	if (!InLooseBoundry(aDot->position, aDot->radius, aOctant)) return;
 
-	for (auto& dot : octantDots)
+	for (auto& dot : aOctant->octantDots)
 	{
 		if (dot == aDot) continue;
 		results.push_back(dot);
 	}
 
 
-	if (!isLeaf)
+	if (!aOctant->isLeaf)
 	{
 		for (int i = 0; i < 8; i++)
 		{
-			if (children[i] == nullptr) continue;
-			children[i]->QueryRange(aDot, results);
+			if (aOctant->children[i] == nullptr) continue;
+			QueryRange(aDot, results, aOctant->children[i]);
 		}
 	}
 }
@@ -366,14 +372,14 @@ void Octant::RemoveChildren()
 	}
 }
 
-void Octant::DebugDraw()
+void Octree::DebugDraw(Octant* aOctant)
 {
-	DebugLines::DrawCube(center, glm::quat(), glm::vec3(halfWidth, halfWidth, halfWidth), glm::vec3(0, 1, 1));
-	DebugLines::DrawSphere(center, 2, glm::vec3(1, 0, 1));
-	if (isLeaf) return;
+	DebugLines::DrawCube(aOctant->center, glm::quat(), glm::vec3(aOctant->halfWidth, aOctant->halfWidth, aOctant->halfWidth), glm::vec3(0, 1, 1));
+	DebugLines::DrawSphere(aOctant->center, 2, glm::vec3(1, 0, 1));
+	if (aOctant->isLeaf) return;
 	for (int i = 0; i < 8; i++)
 	{
-		if (children[i] == nullptr) continue;
-		children[i]->DebugDraw();
+		if (aOctant->children[i] == nullptr) continue;
+		DebugDraw(aOctant->children[i]);
 	}
 }
