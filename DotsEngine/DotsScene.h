@@ -232,7 +232,6 @@ public:
 	{
 		center = aCenter;
 		halfWidth = aHalfWidth;
-		looseHalfWidth = halfWidth * 1.5f;
 		octantDots.reserve(adotReserveSize);
 	};
 
@@ -241,10 +240,8 @@ public:
 	}	
 
 	std::vector<Dot*> octantDots;
-
 	glm::vec3 center;
 	float halfWidth;
-	float looseHalfWidth;
 	int level = 0;
 
 	int firstChildIndex;
@@ -257,7 +254,7 @@ public:
 
 	Octree() 
 	{
-		int maxOctants = pow(9, maxLevel) + 1;
+		int maxOctants = pow(8, maxLevel) * 1.5f;
 		for (int i = 0; i < maxOctants; i++)
 		{
 			Octant newOctant = Octant(glm::vec3(0, 0, 0), 0);
@@ -268,7 +265,6 @@ public:
 	std::vector<Octant> octantObjectPool;
 	Octant* root = nullptr;
 	const int maxLevel = 5;
-	//int octantIndex = 0;
 	std::mutex octTreeMutex;
 	int octTreeIndexes[8];
 

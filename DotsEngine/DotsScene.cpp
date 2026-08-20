@@ -309,7 +309,6 @@ void Octree::Subdivide(Octant* aOctant, int octTreeIndex)
 		octantObjectPool[octTreeIndexes[octTreeIndex]].level = aOctant->level + 1;
 		octantObjectPool[octTreeIndexes[octTreeIndex]].center = newCenter;
 		octantObjectPool[octTreeIndexes[octTreeIndex]].halfWidth = newHalfWidth;
-		octantObjectPool[octTreeIndexes[octTreeIndex]].looseHalfWidth = newHalfWidth * 1.5f;
 		octantObjectPool[octTreeIndexes[octTreeIndex]].isLeaf = true;
 		octantObjectPool[octTreeIndexes[octTreeIndex]].octantDots.clear();
 		octTreeIndexes[octTreeIndex]++;
@@ -344,9 +343,10 @@ void Octree::InsertDot(Dot* dot, Octant* aOctant, int octTreeIndex)
 
 bool Octree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant)
 {
-	if (position.x + radius < aOctant->center.x - aOctant->looseHalfWidth || position.x - radius > aOctant->center.x + aOctant->looseHalfWidth) return false;
-	if (position.y + radius < aOctant->center.y - aOctant->looseHalfWidth || position.y - radius > aOctant->center.y + aOctant->looseHalfWidth) return false;
-	if (position.z + radius < aOctant->center.z - aOctant->looseHalfWidth || position.z - radius > aOctant->center.z + aOctant->looseHalfWidth) return false;
+	float looseHalfWidth = aOctant->halfWidth * 1.5f;
+	if (position.x + radius < aOctant->center.x - looseHalfWidth || position.x - radius > aOctant->center.x + looseHalfWidth) return false;
+	if (position.y + radius < aOctant->center.y - looseHalfWidth || position.y - radius > aOctant->center.y + looseHalfWidth) return false;
+	if (position.z + radius < aOctant->center.z - looseHalfWidth || position.z - radius > aOctant->center.z + looseHalfWidth) return false;
 
 	return true;
 }
@@ -383,14 +383,11 @@ void Octree::DebugDraw(Octant* aOctant)
 
 void Octree::rebuildOctree(std::vector<Dot>& dots, float bounds)
 {
-	//octantIndex = 0;
 	root = &octantObjectPool[0];
 	root->center = glm::vec3(0, 0, 0);
 	root->halfWidth = bounds;
-	root->looseHalfWidth = bounds * 1.5f;
 	root->isLeaf = true;
 	root->level = 0;
-	//octantIndex++;
 	octTreeIndexes[0] = 1;
 	Subdivide(root, 0);
 	
@@ -398,8 +395,4 @@ void Octree::rebuildOctree(std::vector<Dot>& dots, float bounds)
 	{
 		octTreeIndexes[i] = (octantObjectPool.size() / 8) * i;
 	}
-	//for (auto& dot : dots)
-	//{
-	//	InsertDot(&dot, root);
-	//}
 };
