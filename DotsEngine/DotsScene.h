@@ -239,11 +239,7 @@ public:
 
 	~Octant()
 	{
-		//RemoveChildren();
 	}	
-
-	//void RemoveChildren();
-
 
 	std::vector<Dot*> octantDots;
 

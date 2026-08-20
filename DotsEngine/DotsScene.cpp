@@ -13,9 +13,7 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual(dotCount);
-	//octreeRoot = new Octant(glm::vec3(0,0,0), bounds, dotCount * 0.01f);
 	octree = new Octree;
-	//octree->root = new Octant(glm::vec3(0, 0, 0), bounds, dotCount * 0.01f);
 	threadPool = new ThreadPool();
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
@@ -285,9 +283,9 @@ void Octree::Subdivide(Octant* aOctant)
 		newCenter = aOctant->center;
 		float newHalfWidth = aOctant->halfWidth * 0.5f;
 
-		if (i & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth; // binary 1 = 0001
-		if (i & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth; // binary 2 = 0010 
-		if (i & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; // binary 4 = 0100
+		if (i & 1) newCenter.x += newHalfWidth; else newCenter.x -= newHalfWidth;
+		if (i & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth;  
+		if (i & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; 
 
 		aOctant->children[i] = octantIndex;
 		octantObjectPool[octantIndex].level = aOctant->level + 1;
@@ -354,18 +352,6 @@ void Octree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
 		}
 	}
 }
-
-//void Octant::RemoveChildren()
-//{
-//	if (isLeaf) return;
-//	for (int i = 0; i < 8; i++)
-//	{
-//		if (children[i] == nullptr) continue;
-//		children[i]->RemoveChildren();
-//		delete children[i];
-//		children[i] = nullptr;
-//	}
-//}
 
 void Octree::DebugDraw(Octant* aOctant)
 {
