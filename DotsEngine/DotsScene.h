@@ -217,7 +217,7 @@ private:
 	FlyingCamera* flyingCamera;
 	DotVisual* dotVisual;
 	Octant* octreeRoot = nullptr;
-	Octree* octree;
+	Octree* octTree;
 	ThreadPool* threadPool;
 	std::unordered_set<CollisionPair> dotsToCollide;
 
@@ -233,8 +233,7 @@ public:
 		center = aCenter;
 		halfWidth = aHalfWidth;
 		looseHalfWidth = halfWidth * 1.5f;
-		dotReserveSize = adotReserveSize;
-		octantDots.reserve(dotReserveSize);
+		octantDots.reserve(adotReserveSize);
 	};
 
 	~Octant()
@@ -248,13 +247,8 @@ public:
 	float looseHalfWidth;
 	int level = 0;
 
-
-
-	int children[8];
-
+	int firstChildIndex;
 	bool isLeaf = true;
-	int dotReserveSize;
-
 };
 
 class Octree
@@ -263,7 +257,7 @@ public:
 
 	Octree() 
 	{
-		int maxOctants = pow(8, maxLevel);
+		int maxOctants = pow(9, maxLevel) + 1;
 		for (int i = 0; i < maxOctants; i++)
 		{
 			Octant newOctant = Octant(glm::vec3(0, 0, 0), 0);
@@ -274,31 +268,19 @@ public:
 	std::vector<Octant> octantObjectPool;
 	Octant* root = nullptr;
 	const int maxLevel = 5;
-	int octantIndex = 0;
+	//int octantIndex = 0;
+	std::mutex octTreeMutex;
+	int octTreeIndexes[8];
 
-	void rebuildOctree(std::vector<Dot> &dots, float bounds)
-	{
-		octantIndex = 0;
-		root = &octantObjectPool[octantIndex];
-		root->center = glm::vec3(0, 0, 0);
-		root->halfWidth = bounds;
-		root->looseHalfWidth = bounds * 1.5f;
-		root->isLeaf = true;
-		root->level = 0;
-		octantIndex++;
-		for (auto& dot : dots)
-		{
-			InsertDot(&dot, root);
-		}
-	};
+	void rebuildOctree(std::vector<Dot>& dots, float bounds);
 
 	void DebugDraw(Octant* aOctant);
 
-	void Subdivide(Octant* aOctant);
+	void Subdivide(Octant* aOctant, int octTreeIndex);
 
 	int FindOctant(const glm::vec3& position, Octant* aOctant);
 
-	void InsertDot(Dot* dot, Octant* aOctant);
+	void InsertDot(Dot* dot, Octant* aOctant, int octTreeIndex);
 
 	void RemoveDot(Dot* dot, Octant* aOctant)
 	{

@@ -13,7 +13,7 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual(dotCount);
-	octree = new Octree;
+	octTree = new Octree;
 	threadPool = new ThreadPool();
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
@@ -67,7 +67,23 @@ void DotsScene::DotsScene_Update()
 
 	{
 		ZoneScopedN("RebuildOctree")
-		octree->rebuildOctree(dots, bounds);
+		octTree->rebuildOctree(dots, bounds);
+		for (int i = 0; i < 8; i++)
+		{
+			size_t startIndex = (dots.size() / 8) * i;
+			size_t endIndex = (dots.size() / 8) * (i + 1);
+			if (i == 7) endIndex = dots.size();
+
+			int childIndex = i + 1;
+			threadPool->Enqueue([this, startIndex, endIndex, childIndex]()
+			{
+				ZoneScopedN("RebuildOctreePart");
+				for (size_t i = startIndex; i < endIndex; i++)
+				{
+					octTree->InsertDot(&dots[i], &octTree->octantObjectPool[childIndex], childIndex - 1);
+				}
+			});
+		}
 		//octree->DebugDraw(octree->root);
 	}
 
@@ -88,14 +104,16 @@ void DotsScene::DotsScene_Update()
 
 	if (dots.empty()) return;
 
+	threadPool->WaitForTasks();
+
 	//Handle collision
 	{
 		ZoneScopedN("Collision")
 
 		for (int i = 0; i < threadPool->threadCount; i++)
 		{
-			int startIndex = (dots.size() / threadPool->threadCount) * i;
-			int endIndex = (dots.size() / threadPool->threadCount) * (i + 1);
+			size_t startIndex = (dots.size() / threadPool->threadCount) * i;
+			size_t endIndex = (dots.size() / threadPool->threadCount) * (i + 1);
 			if (i == threadPool->threadCount - 1) endIndex = dots.size();
 
 			threadPool->Enqueue([this, startIndex, endIndex]()
@@ -104,11 +122,11 @@ void DotsScene::DotsScene_Update()
 				std::vector<Dot*> rangeResults;
 				rangeResults.reserve(25);
 
-				for (int d1 = startIndex; d1 < endIndex; d1++)
+				for (size_t d1 = startIndex; d1 < endIndex; d1++)
 				{
 					{
 						ZoneScopedN("OctreeQuery")
-						octree->QueryRange(&dots[d1], rangeResults, octree->root);
+						octTree->QueryRange(&dots[d1], rangeResults, octTree->root);
 					}
 					{
 						ZoneScopedN("CollisionCheck")
@@ -273,10 +291,10 @@ void DotsScene::DotsScene_LeaderBoardMode()
 }
 
 
-void Octree::Subdivide(Octant* aOctant)
+void Octree::Subdivide(Octant* aOctant, int octTreeIndex)
 {
 	aOctant->isLeaf = false;
-
+	aOctant->firstChildIndex = octTreeIndexes[octTreeIndex];
 	for (int i = 0; i < 8; i++)
 	{
 		glm::vec3 newCenter;
@@ -287,14 +305,13 @@ void Octree::Subdivide(Octant* aOctant)
 		if (i & 2) newCenter.y += newHalfWidth; else newCenter.y -= newHalfWidth;  
 		if (i & 4) newCenter.z += newHalfWidth; else newCenter.z -= newHalfWidth; 
 
-		aOctant->children[i] = octantIndex;
-		octantObjectPool[octantIndex].level = aOctant->level + 1;
-		octantObjectPool[octantIndex].center = newCenter;
-		octantObjectPool[octantIndex].halfWidth = newHalfWidth;
-		octantObjectPool[octantIndex].looseHalfWidth = newHalfWidth * 1.5f;
-		octantObjectPool[octantIndex].isLeaf = true;
-		octantObjectPool[octantIndex].octantDots.clear();
-		octantIndex++;
+		octantObjectPool[octTreeIndexes[octTreeIndex]].level = aOctant->level + 1;
+		octantObjectPool[octTreeIndexes[octTreeIndex]].center = newCenter;
+		octantObjectPool[octTreeIndexes[octTreeIndex]].halfWidth = newHalfWidth;
+		octantObjectPool[octTreeIndexes[octTreeIndex]].looseHalfWidth = newHalfWidth * 1.5f;
+		octantObjectPool[octTreeIndexes[octTreeIndex]].isLeaf = true;
+		octantObjectPool[octTreeIndexes[octTreeIndex]].octantDots.clear();
+		octTreeIndexes[octTreeIndex]++;
 	}
 }
 int Octree::FindOctant(const glm::vec3& position, Octant* aOctant)
@@ -306,7 +323,7 @@ int Octree::FindOctant(const glm::vec3& position, Octant* aOctant)
 	return index;
 }
 
-void Octree::InsertDot(Dot* dot, Octant* aOctant)
+void Octree::InsertDot(Dot* dot, Octant* aOctant, int octTreeIndex)
 {
 	if (dot->radius > aOctant->halfWidth * 0.5f || aOctant->level >= maxLevel)
 	{
@@ -317,11 +334,11 @@ void Octree::InsertDot(Dot* dot, Octant* aOctant)
 
 	if (aOctant->isLeaf)
 	{
-		Subdivide(aOctant);
+		Subdivide(aOctant, octTreeIndex);
 	}
 
-	int octantIndex = FindOctant(dot->position, aOctant);
-	InsertDot(dot, &octantObjectPool[aOctant->children[octantIndex]]);
+	int childOctantIndex = aOctant->firstChildIndex + FindOctant(dot->position, aOctant);
+	InsertDot(dot, &octantObjectPool[childOctantIndex], octTreeIndex);
 }
 
 bool Octree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant)
@@ -343,12 +360,11 @@ void Octree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
 		results.push_back(dot);
 	}
 
-
 	if (!aOctant->isLeaf)
 	{
 		for (int i = 0; i < 8; i++)
 		{
-			QueryRange(aDot, results,&octantObjectPool[aOctant->children[i]]);
+			QueryRange(aDot, results,&octantObjectPool[aOctant->firstChildIndex + i]);
 		}
 	}
 }
@@ -360,6 +376,29 @@ void Octree::DebugDraw(Octant* aOctant)
 	if (aOctant->isLeaf) return;
 	for (int i = 0; i < 8; i++)
 	{
-		DebugDraw(&octantObjectPool[aOctant->children[i]]);
+		DebugDraw(&octantObjectPool[aOctant->firstChildIndex + i]);
 	}
 }
+
+void Octree::rebuildOctree(std::vector<Dot>& dots, float bounds)
+{
+	//octantIndex = 0;
+	root = &octantObjectPool[0];
+	root->center = glm::vec3(0, 0, 0);
+	root->halfWidth = bounds;
+	root->looseHalfWidth = bounds * 1.5f;
+	root->isLeaf = true;
+	root->level = 0;
+	//octantIndex++;
+	octTreeIndexes[0] = 1;
+	Subdivide(root, 0);
+	
+	for (int i = 1; i < 8; i++)
+	{
+		octTreeIndexes[i] = (octantObjectPool.size() / 8) * i;
+	}
+	//for (auto& dot : dots)
+	//{
+	//	InsertDot(&dot, root);
+	//}
+};
