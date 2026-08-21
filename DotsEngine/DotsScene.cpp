@@ -13,7 +13,7 @@ DotsScene::DotsScene()
 	mainCamera = new Camera();
 	flyingCamera = new FlyingCamera(mainCamera);
 	dotVisual = new DotVisual(dotCount);
-	octTree = new Octree;
+	octTree = new OctTree;
 	threadPool = new ThreadPool();
 
 	mainCamera->SetPosition(glm::vec3(0, 0, bounds * 4));
@@ -55,6 +55,7 @@ void DotsScene::DotsScene_Update()
 {
 	ZoneScoped;
 	flyingCamera->Update();
+	if (dots.empty()) return;
 
 	//Handle velocity
 	{
@@ -67,12 +68,14 @@ void DotsScene::DotsScene_Update()
 
 	{
 		ZoneScopedN("RebuildOctree")
-		octTree->rebuildOctree(dots, bounds);
+		octTree->RebuildOctree(dots, bounds);
 		for (int i = 0; i < 8; i++)
 		{
-			size_t startIndex = (dots.size() / 8) * i;
-			size_t endIndex = (dots.size() / 8) * (i + 1);
-			if (i == 7) endIndex = dots.size();
+			size_t startIndex;
+			if (i == 0) startIndex = 0;
+			else startIndex = octTree->octantObjectPool[i - 1].lastDotIndex;
+			int endIndex = octTree->octantObjectPool[i].lastDotIndex;
+			//if (i == 7) endIndex = dots.size();
 
 			int childIndex = i + 1;
 			threadPool->Enqueue([this, startIndex, endIndex, childIndex]()
@@ -102,10 +105,9 @@ void DotsScene::DotsScene_Update()
 		}
 	}
 
-	if (dots.empty()) return;
 
 	threadPool->WaitForTasks();
-
+	octTree->SortDotsToLevel(dots, octTree->root, octTree->maxLevel - 2);
 	//Handle collision
 	{
 		ZoneScopedN("Collision")
@@ -120,7 +122,7 @@ void DotsScene::DotsScene_Update()
 			{
 				ZoneScopedN("FindCollisions");
 				std::vector<Dot*> rangeResults;
-				rangeResults.reserve(25);
+				rangeResults.reserve(250);
 
 				for (size_t d1 = startIndex; d1 < endIndex; d1++)
 				{
@@ -200,17 +202,16 @@ void DotsScene::DotsScene_Update()
 
 	{
 		ZoneScopedN("DeathCheck")
-		auto it = dots.begin();
-		while (it != dots.end())
+		for (size_t i = 0; i < dots.size();)
 		{
-			if (it->Health <= 0)
+			if (dots[i].Health <= 0)
 			{
-				auto lastElement = dots.end() - 1;
-				if (it != lastElement) *it = std::move(*lastElement);
+				if (i < dots.size() - 1) dots[i] = std::move(dots.back());
 				dots.pop_back();
+				DotsScene_SpawnRandomDot();
 				continue;
 			}
-			++it;
+			i++;
 		}
 	}
 }
@@ -292,7 +293,7 @@ void DotsScene::DotsScene_LeaderBoardMode()
 }
 
 
-void Octree::Subdivide(Octant* aOctant, int octTreeIndex)
+void OctTree::Subdivide(Octant* aOctant, int octTreeIndex)
 {
 	aOctant->isLeaf = false;
 	aOctant->firstChildIndex = octTreeIndexes[octTreeIndex];
@@ -314,7 +315,7 @@ void Octree::Subdivide(Octant* aOctant, int octTreeIndex)
 		octTreeIndexes[octTreeIndex]++;
 	}
 }
-int Octree::FindOctant(const glm::vec3& position, Octant* aOctant)
+int OctTree::FindOctant(const glm::vec3& position, Octant* aOctant)
 {
 	int index = 0;
 	if (position.x > aOctant->center.x) index |= 1;
@@ -323,7 +324,7 @@ int Octree::FindOctant(const glm::vec3& position, Octant* aOctant)
 	return index;
 }
 
-void Octree::InsertDot(Dot* dot, Octant* aOctant, int octTreeIndex)
+void OctTree::InsertDot(Dot* dot, Octant* aOctant, int octTreeIndex)
 {
 	if (dot->radius > aOctant->halfWidth * 0.5f || aOctant->level >= maxLevel)
 	{
@@ -341,7 +342,7 @@ void Octree::InsertDot(Dot* dot, Octant* aOctant, int octTreeIndex)
 	InsertDot(dot, &octantObjectPool[childOctantIndex], octTreeIndex);
 }
 
-bool Octree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant)
+bool OctTree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant)
 {
 	float looseHalfWidth = aOctant->halfWidth * 1.5f;
 	if (position.x + radius < aOctant->center.x - looseHalfWidth || position.x - radius > aOctant->center.x + looseHalfWidth) return false;
@@ -351,7 +352,7 @@ bool Octree::InLooseBoundry(const glm::vec3& position, float radius, Octant* aOc
 	return true;
 }
 
-void Octree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
+void OctTree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
 {
 	if (!InLooseBoundry(aDot->position, aDot->radius, aOctant)) return;
 
@@ -370,7 +371,7 @@ void Octree::QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant)
 	}
 }
 
-void Octree::DebugDraw(Octant* aOctant)
+void OctTree::DebugDraw(Octant* aOctant)
 {
 	DebugLines::DrawCube(aOctant->center, glm::quat(), glm::vec3(aOctant->halfWidth, aOctant->halfWidth, aOctant->halfWidth), glm::vec3(0, 1, 1));
 	DebugLines::DrawSphere(aOctant->center, 2, glm::vec3(1, 0, 1));
@@ -381,7 +382,7 @@ void Octree::DebugDraw(Octant* aOctant)
 	}
 }
 
-void Octree::rebuildOctree(std::vector<Dot>& dots, float bounds)
+void OctTree::RebuildOctree(std::vector<Dot>& dots, float bounds)
 {
 	root = &octantObjectPool[0];
 	root->center = glm::vec3(0, 0, 0);
@@ -390,9 +391,63 @@ void Octree::rebuildOctree(std::vector<Dot>& dots, float bounds)
 	root->level = 0;
 	octTreeIndexes[0] = 1;
 	Subdivide(root, 0);
-	
+	std::vector<int> endIndices = {0, 0, 0, 0, 0, 0, 0, 0};
+	std::vector<int> startIndices = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	SortDots(dots, root, 0, dots.size(), endIndices, startIndices);
+	for (int i = 0; i < 8; i++)
+	{
+		octantObjectPool[i].firstDotIndex = startIndices[i];
+		octantObjectPool[i].lastDotIndex = endIndices[i];
+	}
 	for (int i = 1; i < 8; i++)
 	{
 		octTreeIndexes[i] = (octantObjectPool.size() / 8) * i;
 	}
 };
+
+void OctTree::SortDots(std::vector<Dot>& dots, Octant* octant,size_t startIndex, size_t endIndex, std::vector<int>&startIndices,std::vector<int>& endIndices)
+{
+	int counts[8] = {0};
+	for (size_t i = startIndex; i < endIndex; i++)
+	{
+		counts[FindOctant(dots[i].position, octant)]++;
+	}
+	startIndices[0] = startIndex;
+	endIndices[0] = counts[0];
+	for (int i = 1; i < 8; i++)
+	{
+		startIndices[i] = startIndices[i - 1] + counts[i - 1];
+		endIndices[i] = endIndices[i - 1] + counts[i];
+	}
+
+	std::vector<Dot> temp(endIndex - startIndex);
+	for (size_t i = startIndex; i < endIndex; i++)
+	{
+		int dotI = FindOctant(dots[i].position, octant);
+		temp[startIndices[dotI]] = dots[i];
+		startIndices[dotI]++;
+	}
+
+	for (size_t i = startIndex; i < endIndex; i++)
+	{
+		dots[i] = std::move(temp[i]);
+	}
+}
+
+void OctTree::SortDotsToLevel(std::vector<Dot>& dots, Octant* octant, int level)
+{
+	if (octant->level = level) return;
+	for (int i = 0; i < 8; i++)
+	{
+		std::vector<int> endIndices = { 0, 0, 0, 0, 0, 0, 0, 0 };
+		std::vector<int> startIndices = { 0, 0, 0, 0, 0, 0, 0, 0 };
+		SortDots(dots, &octantObjectPool[octant->firstChildIndex + i], octant->firstDotIndex, octant->lastDotIndex, startIndices, endIndices);
+		for (int i = 0; i < 8; i++)
+		{
+			octantObjectPool[octant->firstChildIndex + i].firstDotIndex = startIndices[i];
+			octantObjectPool[octant->firstChildIndex + i].lastDotIndex = endIndices[i];
+		}
+		SortDotsToLevel(dots, &octantObjectPool[octant->firstChildIndex + i], level);
+	}
+	
+}

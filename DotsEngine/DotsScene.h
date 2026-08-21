@@ -107,7 +107,7 @@ private:
 };
 
 class Octant;
-class Octree;
+class OctTree;
 
 struct Dot
 {
@@ -216,8 +216,7 @@ private:
 
 	FlyingCamera* flyingCamera;
 	DotVisual* dotVisual;
-	Octant* octreeRoot = nullptr;
-	Octree* octTree;
+	OctTree* octTree;
 	ThreadPool* threadPool;
 	std::unordered_set<CollisionPair> dotsToCollide;
 
@@ -243,16 +242,17 @@ public:
 	glm::vec3 center;
 	float halfWidth;
 	int level = 0;
-
+	size_t firstDotIndex;
+	size_t lastDotIndex;
 	int firstChildIndex;
 	bool isLeaf = true;
 };
 
-class Octree
+class OctTree
 {
 public:
 
-	Octree() 
+	OctTree() 
 	{
 		int maxOctants = pow(8, maxLevel) * 1.5f;
 		for (int i = 0; i < maxOctants; i++)
@@ -264,11 +264,11 @@ public:
 
 	std::vector<Octant> octantObjectPool;
 	Octant* root = nullptr;
-	const int maxLevel = 5;
+	const int maxLevel = 6;
 	std::mutex octTreeMutex;
 	int octTreeIndexes[8];
 
-	void rebuildOctree(std::vector<Dot>& dots, float bounds);
+	void RebuildOctree(std::vector<Dot>& dots, float bounds);
 
 	void DebugDraw(Octant* aOctant);
 
@@ -286,4 +286,8 @@ public:
 	bool InLooseBoundry(const glm::vec3& position, float radius, Octant* aOctant);
 
 	void QueryRange(Dot* aDot, std::vector<Dot*>& results, Octant* aOctant);
+
+	void SortDots(std::vector<Dot>& dots, Octant* octant, size_t startIndex, size_t endIndex, std::vector<int>& startIndices,std::vector<int>& endIndices);
+
+	void SortDotsToLevel(std::vector<Dot>& dots, Octant* octant, int level);
 };
